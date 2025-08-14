@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bookips Chatbot</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --muted:#334155; --text:#e5e7eb; --sub:#94a3b8; }
+    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto; background:var(--bg); color:var(--text);} 
+    .wrap{max-width:800px;margin:0 auto; padding:24px;}
+    .card{background:var(--panel); border:1px solid #1f2937; border-radius:16px; padding:16px; box-shadow:0 8px 30px rgba(0,0,0,.25)}
+    .row{display:flex; gap:12px; align-items:center}
+    .input{flex:1; padding:12px 14px; border-radius:12px; border:1px solid #374151; background:#0b1220; color:var(--text);}
+    .btn{padding:12px 16px; border-radius:12px; border:1px solid #374151; background:#0b1220; color:var(--text); cursor:pointer}
+    .btn:disabled{opacity:.6; cursor:not-allowed}
+    .chat{margin-top:16px; display:flex; flex-direction:column; gap:12px; max-height:60vh; overflow:auto; padding-right:6px}
+    .msg{padding:12px 14px; border-radius:14px; line-height:1.4; white-space:pre-wrap}
+    .me{align-self:flex-end; background:#1f2937;}
+    .bot{align-self:flex-start; background:#0b1220; border:1px solid #1f2937}
+    .muted{color:var(--sub); font-size:12px}
+    .faq{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+    .tag{border:1px solid #374151; color:var(--text); background:#0b1220; border-radius:999px; padding:8px 10px; cursor:pointer;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2 style="margin: 0 0 8px 0">Bookips 챗봇</h2>
+    <div class="muted">문서를 바탕으로 답해요. 질문을 입력해 보세요.</div>
+
+    <div class="card" style="margin-top:12px">
+      <div id="faq" class="faq"></div>
+      <div id="chat" class="chat"></div>
+      <form id="form" class="row" style="margin-top:12px">
+        <input id="q" class="input" autocomplete="off" placeholder="예) ‘할인쿠폰’ 언급 문서를 모두 찾아줘" />
+        <button id="send" class="btn" type="submit">전송</button>
+      </form>
+    </div>
+    <div class="muted" style="margin-top:12px">⚙️ 설정: <code id="wb"></code></div>
+  </div>
+
+  <script>
+    // ① 여기에 n8n Webhook URL을 넣으세요 (POST)
+    const WEBHOOK_URL = "https://solvook.app.n8n.cloud/webhook/taskchat";
+    const FAQ_URL = "https://solvook.app.n8n.cloud/webhook/taskchat-faqs"; // 예: https://n8n.yourdomain.com/webhook/taskchat-faqs
+
+    document.getElementById('wb').textContent = WEBHOOK_URL;
+
+    const chat = document.getElementById('chat');
+    const form = document.getElementById('form');
+    const input = document.getElementById('q');
+    const faq = document.getElementById('faq');
+
+    const push = (text, who='bot') => {
+      const div = document.createElement('div');
+      div.className = `msg ${who==='me'?'me':'bot'}`;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function ask(q){
+      push(q, 'me');
+      input.value = '';
+      document.getElementById('send').disabled = true;
+      try {
+        const res = await fetch(WEBHOOK_URL, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q })
+        });
+        const data = await res.json();
+        push(data.answer || JSON.stringify(data));
+        renderFaq(data.faqs || []);
+      } catch (e) {
+        push('요청 중 오류가 발생했어요. 관리자에게 문의해주세요.');
+      } finally {
+        document.getElementById('send').disabled = false;
+      }
+    }
+
+    function renderFaq(items){
+      faq.innerHTML = '';
+      if(!items || !items.length) return;
+      items.forEach(t => {
+        const b = document.createElement('button');
+        b.className = 'tag';
+        b.textContent = t;
+        b.onclick = () => ask(t);
+        faq.appendChild(b);
+      });
+    }
+
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if(!q) return;
+      ask(q);
+    });
+
+    // 첫 로드: FAQ 제안 불러오기
+    (async function(){
+      if(!FAQ_URL || FAQ_URL.includes('<YOUR_N8N_FAQ_URL>')) return;
+      try{
+        const r = await fetch(FAQ_URL);
+        const d = await r.json();
+        renderFaq(d.faqs || []);
+      }catch(e){ /* ignore */ }
+    })();
+  </script>
+</body>
+</html>
